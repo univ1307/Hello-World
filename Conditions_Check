@@ -1,0 +1,115 @@
+'Check conditions for strategies
+Function isTokyoFixing() As Boolean
+    h = Hour(Now())
+    m = Minute(Now())
+    If (h = 8) And ((m >= 51) And (m <= 55)) Then
+        isTokyoFixing = True
+    Else
+        isTokyoFixing = False
+    End If
+End Function
+Function isBeforeLondon() As Boolean
+    h = Hour(Now())
+    m = Minute(Now())
+    If (h < 14) And (h >= 6) Then
+        isBeforeLondon = True
+    Else
+        isBeforeLondon = False
+    End If
+End Function
+Function isUSCashOpen() As Boolean
+    h = Hour(Now())
+    m = Minute(Now())
+    If (h = 21 And m >= 30) Or (h > 21) Or (h < 4) Then
+        isUSCashOpen = True
+    Else
+        isUSCashOpen = False
+    End If
+End Function
+
+Function isOpen() As Boolean
+    h = Hour(Now())
+    m = Minute(Now())
+    If (h = 6) And (m = 0) Then
+        isOpen = True
+    Else
+        isOpen = False
+    End If
+End Function
+Function isFirstSignal(market, i As Variant) As Boolean
+    isFirstSignal = market.Cells(2 + i, 37)
+End Function
+'Valuation using from 30 min avg. if direction is not provided, assume it's not expensive
+Function isExpensive(market, i, upOrDown As Variant) As Boolean
+    from30minAvg = market.Cells(2 + i, 36)
+    If (UCase(upOrDown) = "HIGHER") Then
+        isExpensive = (from30minAvg > 0.1)
+    ElseIf (UCase(upOrDown) = "LOWER") Then
+        isExpensive = (from30minAvg < -0.1)
+    Else
+        isExpensive = False
+    End If
+End Function
+Function isSurprise(market, upOrDown As Variant) As Boolean
+    'Get Sentiment
+    sentiment = market.Cells(18, 19)
+    'Get direction
+    If (UCase(upOrDown) = "HIGHER") Then
+        direction = 1
+    ElseIf (UCase(upOrDown) = "LOWER") Then
+        direction = -1
+    Else
+        direction = 0
+    End If
+    
+    On Error GoTo eh
+    isSurprise = (sentiment * direction < 0)
+
+Done: Exit Function
+
+eh:
+    isSurprise = False
+End Function
+Function ATA_same_way(market, i, upOrDown As Variant) As Boolean
+    'Get ATA
+    ATA = market.Cells(2 + i, 4) + market.Cells(2 + i, 11)
+    'Get direction
+    If (UCase(upOrDown) = "HIGHER") Then
+        direction = 1
+    ElseIf (UCase(upOrDown) = "LOWER") Then
+        direction = -1
+    Else
+        direction = 0
+    End If
+    
+    On Error GoTo eh
+    ATA_same_way = (ATA * direction > 0)
+
+Done: Exit Function
+
+eh:
+    MsgBox "ATA error, returning false"
+    ATA_same_way = False
+    
+End Function
+Function atOpenHour(market, i As Variant) As Boolean
+    'Get opening time
+    open_hour = market.Cells(i + 2, 30)
+    open_h = Hour(open_hour)
+    open_m = Minute(open_hour)
+    'Check if it's opening time now
+    If (Hour(Now()) = open_h) And (Minute(Now()) = open_m) Then
+        atOpenHour = True
+    Else
+        atOpenHour = False
+    End If
+End Function
+'Check if the product is JPY or ESA. depends on table in line with the spreadsheet
+Function isJPorES(i As Variant) As Boolean
+    isJPorES = (productID(i) = "JP") Or (productID(i) = "ES")
+End Function
+Sub test()
+    Set market = Range("market")
+    x = isUSCashOpen
+    atOpenHour market, 5
+End Sub
