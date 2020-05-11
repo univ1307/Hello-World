@@ -1,0 +1,31 @@
+'Main algo for strategy CrazyVolume
+Sub CVol(market, i, upOrDown As Variant)
+    'check conditions
+    a = isTokyoFixing()
+    b = isBeforeLondon()
+    C = ATA_same_way(market, i, upOrDown)
+    d = isFirstSignal(market, i)
+    e = isJPorES(i)
+    f = isExpensive(market, i, upOrDown)
+    'send trade orders if conditions are met
+    If (Not a) And b And (C Or (d And e)) And (Not f) Then
+        'get parameters
+        product = productID(i)
+        direction = upOrDownToDirection(upOrDown)
+        n = getNotional(market, i)
+        price = market.Cells(i + 2, 3)
+        Trade product, direction, n, price
+        'update key variables for risk management
+        'set first signal to false
+        Range("FirstSignals_Start").Offset(i, 0) = False
+    End If
+End Sub
+
+Sub test()
+    Set market = Range("market")
+    x = isJPorES(3)
+    MsgBox isSurprise(market, "")
+    i = 1
+    upOrDown = "Lower"
+    CVol market, i, upOrDown
+End Sub
