@@ -1,0 +1,92 @@
+' REST client class module
+Dim rc As New IGApiRestClient
+
+'
+' Login button clicked
+'
+Public Sub loginButton_Click()
+    
+    Dim userName As String
+    Dim password As String
+    Dim apiKey As String
+    
+    userName = "univ1307"
+    password = ""
+    apiKey = ""
+    
+    'activityTextbox.text = ""
+    'clearData
+     
+    Dim authResult As Dictionary
+    Set authResult = restClient.authenticateAccount(userName, password, apiKey)
+    If Not authResult Is Nothing Then
+        'appendActivity "Connected"
+        Range(Range("IG_Login").Offset(0, 0), Range("IG_Login").Offset(0, 1)) = Array("Connected", Now())
+        Range("IG_Login").Offset(0, 1).NumberFormat = "HH:MM"
+        ' Configure Excel to pull streaming updates as often as possible
+        'Application.RTD.ThrottleInterval = 0
+        ' Uncomment for real-time prices - this is very CPU intensive
+        ' Buffer interval defaults to 500ms
+        'Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "bufferInterval", "0"
+        ' Set manual refresh to true from very remote locations
+        ' Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "manualRefresh", "true"
+        ' This will require manually calling refresh to update lighstreamer subscriptions, i.e.
+        ' Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "refresh"
+        'Dim maxPriceRequestsPerSecond As Double
+        'maxPriceRequestsPerSecond = 0  ' all available updates
+        'If restClient.streamingAuthentication(maxPriceRequestsPerSecond) Then
+            m_loggedIn = True
+            'populateAccounts
+            'manualStreamingRefresh
+        'Else
+            'appendActivity "Lightstreamer connection failure"
+        'End If
+    Else
+        'appendActivity "Authentication failed"
+    End If
+    
+End Sub
+
+'
+' REST client handle
+'
+Public Function restClient() As IGApiRestClient
+    Set restClient = rc
+End Function
+
+'
+' Return the client sentiment data for the given EPIC
+'
+Public Function clientSentiment(epic As String) As String
+
+    Dim marketDetails As Object
+    Set marketDetails = restClient.marketDetails(epic)
+    
+    Dim cs As Object
+    Set cs = restClient.clientSentiment(marketDetails.Item("instrument").Item("marketId"))
+    
+    If Not cs Is Nothing Then
+    
+        Dim clientSentimentShort As String
+        Dim clientSentimentLong As String
+        clientSentimentShort = cs.Item("shortPositionPercentage")
+        clientSentimentLong = cs.Item("longPositionPercentage")
+        clientSentiment = clientSentimentShort + " - " + clientSentimentLong
+    
+    End If
+
+End Function
+
+'
+' Extract a field from a JSON string
+'
+Public Function jsonField(text As String, field As String) As String
+
+    Dim data As Dictionary
+    Set data = JSON.parse(text)
+    jsonField = data.Item(field)
+
+End Function
+
+
+
