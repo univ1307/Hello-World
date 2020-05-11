@@ -1,0 +1,39 @@
+'Pull certain IG sentiment to spreadsheet for further analysis
+Function Get_Sentiment() As Variant
+    loginButton_Click
+    ES_short = Left(clientSentiment(IG_epic("ES")), 2)
+    DJ_short = Left(clientSentiment(IG_epic("DJ")), 2)
+    Range("IG_WALL_Longs") = 100 - DJ_short
+    Get_Sentiment = 100 - DJ_short
+End Function
+
+'Check the sentiment. alert if there is big retails movement
+Sub Check_sentiment(market As Variant)
+    'definition of a big jump
+    x = 10
+    'Get the sentiment
+    DJ_short = Get_Sentiment
+    'check against the previous high and low
+    high = market.Cells(20, 23)
+    low = market.Cells(21, 23)
+    'if from high or from low >= x, send an alert (log it first)
+    high_sent = market.Cells(20, 22)
+    low_sent = market.Cells(21, 22)
+    If (DJ_short >= low + x) And (Not high_sent) Then
+        Log_sentiment "Big Jump Higher", DJ_short
+        Range("IG_WALL_Longs").Offset(1, -1) = True
+    ElseIf (DJ_short <= high - x) And (Not low_sent) Then
+        Log_sentiment "Big Drop Lower", DJ_short
+        Range("IG_WALL_Longs").Offset(2, -1) = True
+    End If
+    'update accordingly
+    If DJ_short > high Then
+        Range("IG_WALL_Longs").Offset(1, 0) = DJ_short
+    ElseIf DJ_short < low Then
+        Range("IG_WALL_Longs").Offset(2, 0) = DJ_short
+    End If
+End Sub
+Sub test()
+    Set market = Range("market")
+    Check_sentiment market
+End Sub
