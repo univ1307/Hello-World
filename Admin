@@ -1,0 +1,106 @@
+'morning routine
+Sub morning_routine()
+    'back up the data
+    ClearHistory
+    'clear crazy volume data
+    ClearCrazyVolume
+    'clear FQTB data
+    ClearFQTB
+    'clear yesterday's last directions (first direction usually wrong, commenting this out)
+    'ClearLastDirections
+    'kick off the monitor if it's not on
+    a = Range("Auto")
+    If Not a Then
+        Switch
+    End If
+    'repeat the following day
+    Application.OnTime TimeValue("06:00:00"), "morning_routine"
+End Sub
+'post japan lunch
+Sub post_japan_lunch()
+    'copy ATA
+    Range("PostJapanLunch_ATA").value = Range("ATA").value
+    Range("U1") = "Japan"
+    'repeat the following day
+    Application.OnTime TimeValue("11:00:00"), "post_japan_lunch"
+End Sub
+'post china lunch
+Sub post_china_lunch()
+    'copy ATA
+    Range("PostChinaLunch_ATA").value = Range("ATA").value
+    Range("U1") = "China"
+    'repeat the following day
+    Application.OnTime TimeValue("13:00:00"), "post_china_lunch"
+End Sub
+'Save a backup and Clear Volume History
+Sub ClearHistory()
+    'save a backup
+    'wd = Weekday(Now(), vbMonday)
+    'If wd = 1 Then
+    '    d = 3
+    'ElseIf wd = 7 Then
+    '    d = 2
+    'Else
+        d = 1
+    'End If
+    backup_location = "C:\users\mrtre\onedrive\documents\Data\MktMonitor_" & Year(Now() - d) & Month(Now() - d) & Day(Now() - d) & ".xlsb"
+    home_location = "C:\users\mrtre\onedrive\documents\Gadgets\MktMonitor.xlsb"
+    
+    Application.DisplayAlerts = False
+    
+    ActiveWorkbook.SaveAs Filename:=backup_location, FileFormat:=xlExcel12, CreateBackup:=False
+    ChDir "C:\users\mrtre\onedrive\documents\Gadgets"
+    ActiveWorkbook.SaveAs Filename:=home_location, FileFormat:=xlExcel12, CreateBackup:=False
+    
+    Application.DisplayAlerts = True
+    
+    'clear volume history
+    Range("Volume_History").ClearContents
+    Sheets("Volume").Calculate
+End Sub
+Sub ClearFQTB()
+    Range("FQTB").ClearContents
+    Sheets("Monitor").Calculate
+End Sub
+Sub ClearLastDirections()
+    Range("LastDirections").ClearContents
+End Sub
+Sub ClearCrazyVolume()
+    Range("CrazyVolume").ClearContents
+    Range("FirstSignals") = True
+    Sheets("Monitor").Calculate
+End Sub
+Sub FastVolumePageCalculate()
+    'Workbooks("MktMonitor.xlsb").Sheets("Volume").Calculate
+    Range("Volume_Count").Calculate
+    Range("ATA_Count").Calculate
+    'trying to safe time by just calculating the ATA and TAV last row
+    C = Range("Volume_Count")
+    Range(Range("ATA_Start").Offset(C, -1), Range("ATA_Start").Offset(C, 100)).Calculate
+    Range(Range("TAV_Start").Offset(-1, 0), Range("ATA_Start").Offset(-1, 100)).Calculate
+    'Update for the graphs
+    Range("GBP_ATA").Calculate
+    Range("ATA_ALL").Calculate
+    Range("ESA_ATA").Calculate
+    Range("JPY_ATA").Calculate
+End Sub
+'Reset IG sentiment High, Low, High_sent and Low_sent
+Sub reset_sentiment()
+    longs = Range("IG_WALL_Longs")
+    'reset high and low
+    Range("IG_WALL_Longs").Offset(1, 0) = longs
+    Range("IG_WALL_Longs").Offset(2, 0) = longs
+    'reset high_sent and low_sent
+    Range("IG_WALL_Longs").Offset(1, -1) = False
+    Range("IG_WALL_Longs").Offset(2, -1) = False
+End Sub
+'Log sentiment
+Sub Log_sentiment(m, v As Variant)
+    Range("SJ_count").Calculate
+    n = Range("SJ_count")
+    Info = Array(Now(), v, m)
+    Range(Range("Sentiment_Jump").Offset(n + 1, 0), Range("Sentiment_Jump").Offset(n + 1, 2)) = Info
+End Sub
+Sub test()
+    Log_sentiment "Big Jump Higher", 40
+End Sub
