@@ -1,0 +1,117 @@
+'Various Tables
+
+'VAR default table
+Function VAR_default(product As Variant) As Variant
+    Select Case product
+    Case "JP"
+        VAR_default = 12
+    Case "GB"
+        VAR_default = 14
+    Case "EU"
+        VAR_default = 10
+    Case "AU"
+        VAR_default = 18
+    Case "NZ"
+        VAR_default = 17
+    Case "ES"
+        VAR_default = 45
+    Case "NK"
+        VAR_default = 45
+    Case "HC"
+        VAR_default = 35
+    Case Else
+        VAR_default = 12
+    End Select
+End Function
+
+'IG epic
+Function IG_epic(product As Variant) As String
+    Select Case product
+    Case "JP"
+        IG_epic = "CS.D.USDJPY.TODAY.IP"
+    Case "GB"
+        IG_epic = "CS.D.GBPUSD.TODAY.IP"
+    Case "EU"
+        IG_epic = "CS.D.EURUSD.TODAY.IP"
+    Case "AU"
+        IG_epic = "CS.D.AUDUSD.TODAY.IP"
+    Case "NZ"
+        IG_epic = "CS.D.NZDUSD.TODAY.IP"
+    Case "ES"
+        IG_epic = "IX.D.SPTRD.DAILY.IP"
+    Case "DJ"
+        IG_epic = "IX.D.DOW.DAILY.IP"
+    Case "NK"
+        IG_epic = "IX.D.NIKKEI.DAILY.IP"
+    Case "HC"
+        IG_epic = "IX.D.HSCHIN.DFB.IP"
+    Case Else
+        IG_epic = ""
+    End Select
+End Function
+'Scale factor (IG price / BBG price)
+Function scale_factor(product As Variant) As String
+    Select Case product
+    Case "JP"
+        scale_factor = 100
+    Case "GB"
+        scale_factor = 10000
+    Case "EU"
+        scale_factor = 10000
+    Case "AU"
+        scale_factor = 10000
+    Case "NZ"
+        scale_factor = 10000
+    Case "ES"
+        scale_factor = 1
+    Case "NK"
+        scale_factor = 1
+    Case "HC"
+        scale_factor = 1
+    Case Else
+        scale_factor = ""
+    End Select
+End Function
+'convert upOrDown to direction
+Function upOrDownToDirection(upOrDown As Variant) As Variant
+    If UCase(upOrDown) = "HIGHER" Then
+        upOrDownToDirection = "BUY"
+    ElseIf UCase(upOrDown) = "LOWER" Then
+        upOrDownToDirection = "SELL"
+    End If
+End Function
+
+'To be finished: other than 1st 3 products
+'convert i to Product
+Function productID(i As Variant) As Variant
+    Select Case i
+    Case 1
+        productID = "GB"
+    Case 2
+        productID = "JP"
+    Case 3
+        productID = "ES"
+    Case Else
+        productID = ""
+    End Select
+End Function
+
+Function getNotional(market, i As Variant) As Variant
+    getNotional = market.Cells(2 + i, 22)
+End Function
+
+Function fromDirectionToNumber(direction As Variant) As Variant
+    If direction = "Buy" Then
+        fromDirectionToNumber = 1
+    ElseIf direction = "Sell" Then
+        fromDirectionToNumber = -1
+    Else
+        fromDirectionToNumber = 0
+    End If
+End Function
+
+Sub test()
+    MsgBox True
+End Sub
+
+
