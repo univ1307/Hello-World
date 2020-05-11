@@ -1,1 +1,159 @@
+'Safety Checks for Automated Trading
+
+Const VARLimitSingleTicket = 300
+Const VARLimitDaily = 2000
+Const NotionalLimitSingle = 30000
+Const NotionalLimitDaily = 100000
+Const DailyTicketsLimit = 50
+Const PnLLimit = -1000
+Const SizeLimit = 10
+
+'Machine Gun Risks - Daily Total Ticket Number Check
+Function MachineGun_Check(risk_data As Variant) As Boolean
+    'Get the existing tickets for today
+    today_so_far = risk_data.Cells(3, 3)
+    
+    'see if the new addition would exceed the limit
+    If (today_so_far + 1 <= DailyTicketsLimit) Then
+        MachineGun_Check = True
+    Else
+        MsgBox "Exceed Daily Ticket Limit " & DailyTicketsLimit
+        MachineGun_Check = False
+    End If
+End Function
+
+'Notional Check, Single Ticket
+Function NotionalCheck_Single(n As Variant) As Boolean
+    'see if the single ticket size exceeds the limit
+    If (n <= NotionalLimitSingle) Then
+        NotionalCheck_Single = True
+    Else
+        MsgBox "Exceed Single Ticket Notional Limit " & NotionalLimitSingle
+        NotionalCheck_Single = False
+    End If
+End Function
+
+'Notional Check, Daily Total
+Function NotionalCheck_Daily(risk_data, n As Variant) As Boolean
+    'Get the existing total notional for today
+    today_so_far = risk_data.Cells(4, 3)
+    
+    'see if the new addition would exceed the limit
+    If (today_so_far + n <= NotionalLimitDaily) Then
+        NotionalCheck_Daily = True
+    Else
+        MsgBox "Exceed Daily Notional Limit " & NotionalLimitDaily
+        NotionalCheck_Daily = False
+    End If
+End Function
+
+'VAR Check
+Function ValueAtRisk(product, notional As Variant) As Double
+    'Get 1 month implied vol (using internal default vol for reliability and robustness)
+     v = VAR_default(product)
+     'Estimate VAR using 1 day implied range
+     ValueAtRisk = notional * v / 100 / 16
+End Function
+'VAR Check, Single Ticket
+Function VARCheck_Single(product, n As Variant) As Boolean
+    'see if the single ticket VAR exceeds the limit
+    If (ValueAtRisk(product, n) <= VARLimitSingleTicket) Then
+        VARCheck_Single = True
+    Else
+        MsgBox "Exceed Single Ticket VAR Limit " & VARLimitSingleTicket
+        VARCheck_Single = False
+    End If
+End Function
+'VAR Check, Daily Total
+Function VARCheck_DailyTotal(risk_data, product, n As Variant) As Boolean
+    'see if the additional VAR would exceed the limit
+    VAR_now = risk_data.Cells(2, 3)
+    
+    If (ValueAtRisk(product, n) <= VARLimitDaily) Then
+        VARCheck_DailyTotal = True
+    Else
+        MsgBox "New Ticket would blowup daily VAR Limit (" & VARLimitDaily & ")"
+        VARCheck_DailyTotal = False
+    End If
+End Function
+
+'Position Checks
+Function PositionCheck(risk_data, product, n As Variant) As Boolean
+    'see if the addition of new risk would exceed the product position limit
+End Function
+'Price Checks
+
+'PnL Checks
+Function PnLCheck(risk_data As Variant) As Boolean
+    pnl = risk_data.Cells(5, 3)
+    If pnl < PnLLimit Then
+        MsgBox "Exceed Daily Loss Threshold " & PnLLimit
+        PnLCheck = False
+    Else
+        PnLCheck = True
+    End If
+End Function
+
+'IG Size Check, Single Ticket
+Function SizeCheck_Single(size As Variant) As Boolean
+    'see if size sent to IG exceeds the limit
+    If (size <= SizeLimit) Then
+        SizeCheck_Single = True
+    Else
+        MsgBox "IG Size Exceed Size Limit " & SizeLimit
+        SizeCheck_Single = False
+    End If
+End Function
+
+'Confirmation Checks
+
+'Publish the limits to spreadsheet and execute start of day admins
+Sub publish_limits()
+    l = Array(VARLimitSingleTicket, VARLimitDaily, NotionalLimitSingle, NotionalLimitDaily, DailyTicketsLimit)
+    Range("Limits") = Application.WorksheetFunction.Transpose(l)
+    
+    check_var
+    
+    reset_daily_limit
+    
+    clear_todays_trades
+    
+    Sheets("Risk Management").Calculate
+End Sub
+
+'Check the default VAR table against market var, make sure they're not too far away
+Sub check_var()
+    Sheets("Risk Management").Calculate
+    Set market_var = Range("VAR_Table")
+    For i = 1 To 8
+        product = market_var.Cells(i, 1)
+        mkt_v = market_var.Cells(i, 2)
+        default_v = VAR_default(product)
+        If (default_v < 0.5 * mkt_v) Or (default_v > 2 * mkt_v) Then
+            Msg = product & " default volatility needs an update"
+            MsgBox Msg
+        End If
+    Next i
+End Sub
+
+'Reset daily limit on notional, ticket number and pnl
+Sub reset_daily_limit()
+    limits = Array(0, 0, 0)
+    Range(Range("todaysTickets"), Range("todaysTickets").Offset(2, 0)) = Application.WorksheetFunction.Transpose(limits)
+End Sub
+
+'Clear today's trades in Risk Management
+Sub clear_todays_trades()
+    Range("todaysTrades_all").Clear
+End Sub
+
+Sub test()
+   
+    If SizeCheck_Single(10) Then
+        MsgBox "OK"
+    Else
+        MsgBox "Over Limit"
+    End If
+End Sub
+
 
