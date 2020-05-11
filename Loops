@@ -1,0 +1,243 @@
+Public Declare PtrSafe Function sndPlaySound32 _
+    Lib "winmm.dll" _
+    Alias "sndPlaySoundA" ( _
+        ByVal lpszSoundName As String, _
+        ByVal uFlags As Long) As Long
+
+Const SND_SYNC = &H0
+Const SND_ASYNC = &H1
+Const SND_FILENAME = &H20000
+
+
+'Sound for change of direction
+Sub PlayWAV()
+    Dim WAVFile As String
+    WAVFile = "C:\Windows\Media\Alarm01.wav"
+    Call sndPlaySound32(WAVFile, SND_ASYNC)
+End Sub
+'Sound for SGD NEER outside threshold
+Sub PlaySGDSound()
+    Dim WAVFile As String
+    WAVFile = "C:\Windows\Media\Alarm02.wav"
+    Call sndPlaySound32(WAVFile, SND_ASYNC)
+End Sub
+'Sound for risk on
+Sub PlayRiskOnSound()
+    Dim WAVFile As String
+    WAVFile = "C:\Users\MrTre\Music\mine.wav"
+    Call sndPlaySound32(WAVFile, SND_ASYNC)
+End Sub
+'Sound for risk off
+Sub PlayRiskOffSound()
+    Dim WAVFile As String
+    WAVFile = "C:\Users\MrTre\Music\yours.wav"
+    Call sndPlaySound32(WAVFile, SND_ASYNC)
+End Sub
+'Take a snap of the current volume
+Sub Volume_Snap(market As Variant)
+    'Declaration
+    Dim inputData As Variant
+    Dim v(1 To 15), price(1 To 15) As Variant
+    'save it in the history page
+    For i = 1 To 15
+        mkt_open = market.Cells(2 + i, 29)
+        If (mkt_open) And (Not atOpenHour(market, i)) Then
+            price(i) = market.Cells(2 + i, 3)
+            v(i) = market.Cells(2 + i, 8)
+            If v(i) < 0 Then
+                v(i) = ""
+            End If
+        Else
+            price(i) = ""
+            v(i) = ""
+        End If
+    Next i
+    inputData = Array(Now(), price(1), v(1), price(2), v(2), price(3), v(3), price(4), v(4), price(5), v(5), price(6), v(6), price(7), v(7), price(8), v(8), price(9), v(9), price(10), v(10), price(11), v(11), price(12), v(12), price(13), v(13), price(14), v(14), price(15), v(15))
+    n = market.Cells(1, 10)
+    Set targetRange = Workbooks("MktMonitor.xlsb").Sheets("Monitor")
+    Range(Range("Volume_Start").Offset(n + 1, 0), Range("Volume_Start").Offset(n + 1, 30)).value = inputData
+    'take a snap of latest volume to calculate the incremental volume
+    Range("LastSnap").value = Range("Volumes").value
+    'Calculate Volume Sheet to make sure the count is right
+    FastVolumePageCalculate
+End Sub
+
+'Snap every n seconds if the switch is on
+Sub Monitor()
+    Set switchRange = Workbooks("MktMonitor.xlsb").Sheets("Monitor").Range("Auto")
+    a = switchRange
+    'read the data in one go
+    Set targetRange = Workbooks("MktMonitor.xlsb").Sheets("Monitor")
+    targetRange.Calculate
+    Set market = targetRange.Range("Market")
+    If a Then
+        CrazyVolumeinAsia market
+        FromQuietToBusy market
+        Volume_Snap market
+        checkSGD market
+        'Check_sentiment market
+        Application.OnTime Now + TimeValue("00:00:15"), "Monitor"
+    End If
+End Sub
+
+'Flip the Auto switch
+Sub Switch()
+    a = Range("Auto")
+    If a Then
+        Range("Auto") = False
+    Else
+        Range("Auto") = True
+        Monitor
+    End If
+End Sub
+
+Sub TestTest()
+    loginButton_Click
+End Sub
+
+'From Quiet to Busy
+Sub FromQuietToBusy(market As Variant)
+    'what's busy
+    threshold = 1.38
+    'Get last 5 minute and 30 minute normalized volumes
+    For i = 1 To 11
+        v5 = market.Cells(2 + i, 19)
+        v30 = market.Cells(2 + i, 20)
+        quiet = market.Cells(2 + i, 28)
+        If (v5 >= v30) And (v5 >= threshold) And quiet Then
+        'Send an alert and log it
+            AlertAndLog_FQTB market, i
+        ElseIf (v5 < v30) And (Not quiet) Then
+            Range("quiet_start").Offset(i, 0) = True
+        End If
+    Next i
+End Sub
+'Large Jump in Sterling, JPY or E-mini
+Sub CrazyVolumeinAsia(market As Variant)
+'Get Normalised Volume
+    For i = 1 To 3
+        v = market.Cells(2 + i, 11)
+        '> threshold?
+        'for E-mini during cash hour threshold needs to be ~ 6 times higher
+        If (isUSCashOpen) And (i = 3) Then
+            threshold = 90
+        Else
+            threshold = 15
+        End If
+        If (v >= threshold) And (Not isOpen()) Then
+        'Send an alert
+            AlertLargeVolume market, i
+        End If
+    Next i
+End Sub
+
+'Send an alert and log it. invoke CrazyVolume strategy if it's a new direction
+Sub AlertLargeVolume(market, i As Variant)
+
+    'Alert first
+    Beep
+        
+    'Get the info: up or down? norm. vol, last traded
+    product = market.Cells(2 + i, 2)
+    v = market.Cells(2 + i, 11)
+    last = market.Cells(2 + i, 3)
+    avg = market.Cells(2 + i, 18)
+    upOrDown = ""
+    If last > avg Then
+        upOrDown = "Higher"
+        PlayRiskOnSound 'sound alert
+        ATA = market.Cells(2 + i, 4) + market.Cells(2 + i, 11)
+    End If
+    If last < avg Then
+        upOrDown = "Lower"
+        PlayRiskOffSound 'sound alert
+        ATA = market.Cells(2 + i, 4) - market.Cells(2 + i, 11)
+    End If
+    from30min = market.Cells(2 + i, 36)
+        
+    'Beep a few more if it's a new direction
+    lastdir = market.Cells(22 + i, 20)
+    If lastdir <> upOrDown Then
+        'Activate Crazy Volume Strategy
+        CVol market, i, upOrDown
+        'Play special alert
+        PlayWAV
+    End If
+    
+    'Log it quickly
+    If isSurprise(market, upOrDown) Then
+        s = "Surprise"
+    Else
+        s = ""
+    End If
+    jump = last - avg
+    inputData = Array(Now(), product, upOrDown, last, v, from30min, ATA, s, jump)
+    n = market.Cells(28, 19)
+    'if n is smaller than 0 something is wrong, just skip to avoid corrupting the file. do an error msg later
+    If n >= 0 Then
+        Range(Range("CrazyVolume_Start").Offset(n + 1, 0), Range("CrazyVolume_Start").Offset(n + 1, 8)).value = inputData
+    End If
+    
+    'Save the latest direction (and other info)
+    Range(Range("LastDir").Offset(i, 0), Range("LastDir").Offset(i, 8)).value = Array(Now(), product, upOrDown, last, v, from30min, ATA, s, jump)
+    Sheets("Monitor").Calculate
+    
+End Sub
+
+'Send an alert and log it
+Sub AlertAndLog_FQTB(market, i As Variant)
+    
+    'Alert first
+    Beep
+    
+    'Get the info: up or down? norm. vol, last traded
+    product = market.Cells(2 + i, 2)
+    v = market.Cells(2 + i, 19)
+    last = market.Cells(2 + i, 3)
+    avg5 = market.Cells(2 + i, 18)
+    avg30 = market.Cells(2 + i, 35)
+    fromAvg = market.Cells(2 + i, 36)
+    upOrDown = ""
+    If last > avg30 Then
+        upOrDown = "Higher"
+    End If
+    If last < avg30 Then
+        upOrDown = "Lower"
+    End If
+    ATA = market.Cells(2 + i, 4) + market.Cells(2 + i, 11)
+        
+    'Log it quickly
+    inputData = Array(Now(), product, upOrDown, last, v, fromAvg)
+    n = market.Cells(31, 8)
+    Range(Range("FromQuietToBusy").Offset(n + 1, 0), Range("FromQuietToBusy").Offset(n + 1, 5)).value = inputData
+    
+    'Mark the Quiet Switch to False
+    Range("Quiet_Start").Offset(i, 0) = False
+
+    Sheets("Monitor").Calculate
+    
+End Sub
+'check if our .SGD basket is outside specified range
+Sub checkSGD(market As Variant)
+    'Get the reading
+    fromAvg = market.Cells(18, 6)
+    'is it outside the range? send alert
+    If Abs(fromAvg) >= 1 Then
+        PlaySGDSound
+    End If
+End Sub
+Sub test()
+    Set market = Range("Market")
+    AlertAndLog_FQTB market, 1
+    Volume_Snap market
+    i = 1
+    CVol market, i, "Higher"
+    PlayRiskOnSound
+    PlayRiskOffSound 'sound alert
+    PlayWAV
+    i = 1
+    from30min = market.Cells(2 + i, 36)
+    ATA = market.Cells(2 + i, 4)
+    FromQuietToBusy market
+End Sub
+
