@@ -1,0 +1,589 @@
+' Copyright (C) 2014 IG Group (webapisupport@ig.com)
+'
+' Licensed under the Apache License, Version 2.0 (the "License");
+' you may not use this file except in compliance with the License.
+' You may obtain a copy of the License at
+'
+'         http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS,
+' WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+' See the License for the specific language governing permissions and
+' limitations under the License.
+
+Option Explicit
+
+' Backing store for the selectors
+Dim m_watchlistSelectorStore() As String
+Dim m_accountSelectorStore() As String
+
+' Logged in status
+Dim m_loggedIn As Boolean
+
+Const marketDisplayAreaStartRow = 39
+Const marketDisplayAreaStartCol = 1
+
+Private mlngStart As Long
+
+
+'
+' Limit order type selected
+'
+Private Sub limitOrderType_Click()
+
+    ActiveSheet.Range("limitLevelTextField").value = " "
+
+End Sub
+
+'
+' Market order type selected
+'
+Private Sub marketOrderType_Click()
+
+    ActiveSheet.Range("limitLevelTextField").value = "N/A"
+
+End Sub
+
+'
+' Live environment button clicked
+'
+Private Sub liveButton_Click()
+
+    activityTextbox.text = ""
+    restClient.setHost ("live")
+
+End Sub
+
+'
+' Demo environment button clicked
+'
+Private Sub demoButton_Click()
+
+    activityTextbox.text = ""
+    restClient.setHost ("demo")
+
+End Sub
+
+
+'
+' Populate watchlist combobox
+'
+Private Sub populateWatchlists()
+
+    'watchlistSelector.Clear
+    'watchlistSelector.text = ""
+
+    'Dim index As Integer
+    'Dim Watchlists As Collection
+    'Set Watchlists = restClient.Watchlists()
+    
+    'ReDim m_watchlistSelectorStore(1 To Watchlists.count) As String
+    
+    'index = 1
+    'If Not Watchlists Is Nothing Then
+    '    Dim watchlist As Object
+    '    For Each watchlist In Watchlists
+    '        With watchlistSelector
+    '            .AddItem watchlist.Item("name")
+    '            m_watchlistSelectorStore(index) = watchlist.Item("id")
+    '            index = index + 1
+    '        End With
+    '    Next
+    'End If
+
+End Sub
+
+'
+' Populate watchlist combobox
+'
+Private Sub populateAccounts()
+
+    accountSelector.Clear
+    accountSelector.text = ""
+
+    Dim index As Integer
+    Dim accounts As Collection
+    Set accounts = restClient.accounts()
+    
+    ReDim m_accountSelectorStore(1 To accounts.count) As String
+    
+    index = 1
+    If Not accounts Is Nothing Then
+        Dim account As Object
+        For Each account In accounts
+            With accountSelector
+                .AddItem account.Item("accountName")
+                m_accountSelectorStore(index) = account.Item("accountId")
+                If account.Item("preferred") Then
+                    accountSelector.text = account.Item("accountName")
+                End If
+                index = index + 1
+            End With
+        Next
+    End If
+
+End Sub
+
+
+'
+' Positions button clicked
+'
+Public Sub positionsButton_Click()
+    
+    If Not m_loggedIn Then
+       MsgBox "Please login first"
+       Exit Sub
+    End If
+    
+    Dim positions As Collection
+    Set positions = restClient.positions()
+
+    If Not positions Is Nothing Then
+    
+        Dim dataRange As Variant
+        Dim row As Integer
+        Dim column As Integer
+        
+        row = 1
+        column = 1
+        dataRange = Range("market_display").value
+        
+        ActiveSheet.Cells(marketDisplayAreaStartRow - 1, marketDisplayAreaStartCol).value = "Position List"
+        
+        dataRange(row, column) = "Market"
+        column = column + 1
+                        
+        dataRange(row, column) = "Direction"
+        column = column + 1
+                
+        dataRange(row, column) = "Size"
+        column = column + 1
+        
+        dataRange(row, column) = "Level"
+        column = column + 1
+        
+        dataRange(row, column) = "Price"
+        column = column + 1
+        
+        dataRange(row, column) = "P&L"
+        column = column + 1
+        
+        row = row + 1
+    
+        Dim aPosition As Object
+        For Each aPosition In positions
+            
+           Dim market As Object
+           Dim position As Object
+           
+           Dim epic As String
+           Dim pricesAvailable As Boolean
+           
+           column = 1
+           Set market = aPosition.Item("market")
+           Set position = aPosition.Item("position")
+           pricesAvailable = market.Item("streamingPricesAvailable")
+           
+           epic = market.Item("epic")
+       
+           dataRange(row, column) = market.Item("instrumentName")
+           column = column + 1
+                      
+           dataRange(row, column) = position.Item("direction")
+           column = column + 1
+             
+           dataRange(row, column) = position.Item("dealSize")
+           column = column + 1
+         
+           dataRange(row, column) = position.Item("openLevel")
+           column = column + 1
+                    
+           If position.Item("direction") = "BUY" Then
+                dataRange(row, column) = buildRTDString("market", epic, "BID")
+                column = column + 1
+                dataRange(row, column) = "=(D" + CStr(row - 1 + marketDisplayAreaStartRow) + "-E" + CStr(row - 1 + marketDisplayAreaStartRow) + ")*C" + CStr(row - 1 + marketDisplayAreaStartRow) + "*" + CStr(market.Item("scalingFactor")) + "*-1"
+           Else
+                dataRange(row, column) = buildRTDString("market", epic, "OFFER")
+                column = column + 1
+                dataRange(row, column) = "=(D" + CStr(row - 1 + marketDisplayAreaStartRow) + "-E" + CStr(row - 1 + marketDisplayAreaStartRow) + ")*C" + CStr(row - 1 + marketDisplayAreaStartRow) + "*" + CStr(market.Item("scalingFactor"))
+           End If
+           
+           row = row + 1
+           
+        Next
+        
+        Range("market_display").value = dataRange
+        Application.Wait (Now + TimeValue("0:00:01"))
+        'Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "refresh"
+        Range("market_display").Calculate
+        
+    End If
+    
+    
+End Sub
+
+'
+' Market search button clicked
+'
+Private Sub marketSearchButton_Click()
+
+    If Not m_loggedIn Then
+       MsgBox "Please login first"
+       Exit Sub
+    End If
+
+    If marketSearchField.value = "" Then
+        MsgBox "Please enter a market search term"
+       Exit Sub
+    End If
+
+    Dim markets As Collection
+    Set markets = restClient.markets(marketSearchField.value)
+    Dim market As Object
+    If Not markets Is Nothing Then
+       Dim dataRange As Variant
+       Dim row As Integer
+       Dim column As Integer
+       
+       clearData
+       dataRange = Range("market_display").value
+       watchlistSelector.value = ""
+       row = 1
+       column = 1
+       
+       ActiveSheet.Cells(marketDisplayAreaStartRow - 1, marketDisplayAreaStartCol).value = marketSearchField.value + " Market List"
+       
+       dataRange(row, column) = "Epic"
+       column = column + 1
+              
+       dataRange(row, column) = "Market"
+       column = column + 1
+               
+       dataRange(row, column) = "Expiry"
+       column = column + 1
+       
+       dataRange(row, column) = "Bid"
+       column = column + 1
+    
+       dataRange(row, column) = "Offer"
+       column = column + 1
+    
+       dataRange(row, column) = "High"
+       column = column + 1
+    
+       dataRange(row, column) = "Low"
+               
+       row = row + 1
+    
+        For Each market In markets
+           Dim epic As String
+           Dim pricesAvailable As Boolean
+           pricesAvailable = market.Item("streamingPricesAvailable")
+           
+           If pricesAvailable Then
+            
+                column = 1
+                epic = market.Item("epic")
+        
+                dataRange(row, column) = epic
+                column = column + 1
+           
+                dataRange(row, column) = market.Item("instrumentName")
+                column = column + 1
+            
+                dataRange(row, column) = "'" + market.Item("expiry")
+                column = column + 1
+                
+                dataRange(row, column) = market.Item("bid")
+                column = column + 1
+            
+                dataRange(row, column) = market.Item("offer")
+                column = column + 1
+            
+                dataRange(row, column) = market.Item("high")
+                column = column + 1
+            
+                dataRange(row, column) = market.Item("low")
+                column = column + 1
+            
+                row = row + 1
+           
+           End If
+        Next
+        
+        Range("market_display") = dataRange
+    End If
+
+End Sub
+
+'
+' Price history button clicked
+'
+Private Sub priceHistoryButton_Click()
+
+    If Not m_loggedIn Then
+       MsgBox "Please login first"
+       Exit Sub
+    End If
+
+    If epicTextBox.value = "" Then
+        MsgBox "Please specify a market epic"
+       Exit Sub
+    End If
+    
+    If numPointsTextBox.value = "" Then
+        MsgBox "Please specify a number of price data points"
+       Exit Sub
+    End If
+    
+    Dim row As Integer
+    row = 1
+    
+    Sheets("Data").Range("A1:E1000").Clear
+    Sheets("Data").Cells(row, 1).value = "Timestamp"
+    Sheets("Data").Cells(row, 2).value = "Open"
+    Sheets("Data").Cells(row, 3).value = "High"
+    Sheets("Data").Cells(row, 4).value = "Low"
+    Sheets("Data").Cells(row, 5).value = "Close"
+    row = row + 1
+    
+    Dim marketDetails As Object
+    Set marketDetails = restClient.marketDetails(epicTextBox.value)
+    Sheets("Main").Range("T12:T12").value = marketDetails.Item("instrument").Item("name")
+    
+    Dim prices As Collection
+    Set prices = restClient.prices(epicTextBox.value, priceResolutionComboBox.value, numPointsTextBox.value)
+    
+    Dim price As Object
+    If Not prices Is Nothing Then
+        For Each price In prices
+           Dim column As Integer
+           Dim epic As String
+           column = 1
+            
+           Sheets("Data").Cells(row, column).value = price.Item("snapshotTime")
+           Sheets("Data").Cells(row, column + 1).value = price.Item("openPrice").Item("bid")
+           Sheets("Data").Cells(row, column + 3).value = price.Item("highPrice").Item("bid")
+           Sheets("Data").Cells(row, column + 2).value = price.Item("lowPrice").Item("bid")
+           Sheets("Data").Cells(row, column + 4).value = price.Item("closePrice").Item("bid")
+           
+           row = row + 1
+        Next
+    End If
+    
+    Dim CHARTDATA As Range
+    Set CHARTDATA = Sheets("Data").Range(Sheets("Data").Range("A2"), Sheets("Data").Range("A2").Offset(row - 3, 4))
+    ActiveSheet.ChartObjects("Chart 24").Chart.SetSourceData Source:=CHARTDATA
+
+End Sub
+
+'
+' Acitve acount selected
+'
+Private Sub accountSelector_Change()
+
+    If Not m_loggedIn Then
+       Exit Sub
+    End If
+
+    If accountSelector.ListIndex <> -1 Then
+    
+        clearData
+        restClient.switchAccount (m_accountSelectorStore(accountSelector.ListIndex + 1))
+        Range("activeAccountField").value = m_accountSelectorStore(accountSelector.ListIndex + 1)
+        Range("activeAccountNameField").value = accountSelector.text
+        populateWatchlists
+        
+    End If
+
+End Sub
+
+
+'
+' Watchlist selected
+'
+Private Sub watchlistSelector_Change()
+
+    If Not m_loggedIn Then
+       Exit Sub
+    End If
+
+    If watchlistSelector.ListIndex <> -1 Then
+    
+        Dim dataRange As Variant
+        
+        clearData
+        
+        dataRange = Range("market_display").value
+
+        Dim row As Integer
+        Dim column As Integer
+        row = 1
+        column = 1
+        
+        ActiveSheet.Cells(marketDisplayAreaStartRow - 1, marketDisplayAreaStartCol).value = watchlistSelector.value + " Market List"
+        
+        dataRange(row, column) = "Epic"
+        column = column + 1
+    
+        dataRange(row, column) = "Market"
+        column = column + 1
+     
+        dataRange(row, column) = "Expiry"
+        column = column + 1
+     
+        dataRange(row, column) = "Bid"
+        column = column + 1
+     
+        dataRange(row, column) = "Offer"
+        column = column + 1
+     
+        dataRange(row, column) = "High"
+        column = column + 1
+     
+        dataRange(row, column) = "Low"
+        column = column + 1
+     
+        dataRange(row, column) = "Change"
+        column = column + 1
+     
+        dataRange(row, column) = "Change %"
+        row = row + 1
+        
+        Dim markets As Collection
+        Dim market As Object
+        
+        Dim watchlistId As String
+        watchlistId = m_watchlistSelectorStore(watchlistSelector.ListIndex + 1)
+        Set markets = restClient.watchlistMarkets(watchlistId)
+        
+        If Not markets Is Nothing Then
+            For Each market In markets
+            
+               Dim epic As String
+               
+               Dim pricesAvailable As Boolean
+        
+               pricesAvailable = market.Item("streamingPricesAvailable")
+               
+               If pricesAvailable Then
+                    column = 1
+                
+                    epic = market.Item("epic")
+                    dataRange(row, column) = epic
+                    column = column + 1
+                    
+                    dataRange(row, column) = market.Item("instrumentName")
+                    column = column + 1
+                
+                    dataRange(row, column) = "'" + market.Item("expiry")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "BID")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "OFFER")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "HIGH")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "LOW")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "CHANGE")
+                    column = column + 1
+                
+                    dataRange(row, column) = buildRTDString("market", epic, "CHANGE_PCT")
+                    column = column + 1
+               
+                    row = row + 1
+                    
+                End If
+                
+            Next
+            
+            Range("market_display").value = dataRange
+            Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "refresh"
+            Range("market_display").Calculate
+            
+        End If
+
+    End If
+    
+End Sub
+
+'
+' Build RTD formula string for a price subscription
+'
+Public Function buildRTDString(subscriptionType As String, epic As String, field As String) As String
+    Dim rtdString As New cStringBuilder
+    With rtdString
+    .Append "=RTD(""IG.api.excel.RTD.IGApiRTDServer"", """
+    .Append epic
+    .Append field
+    .Append """ ,""subscribe"","
+    .Append """"
+    .Append subscriptionType
+    .Append """, """
+    .Append epic
+    .Append """, """
+    .Append field
+    .Append """)"
+    End With
+    buildRTDString = rtdString.toString
+End Function
+
+'
+' Clear the market display area
+'
+Private Sub clearData()
+    Application.ScreenUpdating = False
+    ActiveSheet.Range("market_display").Select
+    Selection.ClearContents
+    ActiveSheet.Range("ZZ1").Select
+    Application.ScreenUpdating = True
+
+    'restClient.streamingReconnect
+    
+End Sub
+
+
+'
+' Epic cell clicked
+'
+'Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'contents deleted, got a bug not sure how to handle. source code available in ig-api-sample.xlsm
+'
+' Write some text to the activitiy window
+'
+Private Sub appendActivity(text As String)
+    
+    'If activityTextbox.text <> "" Then
+    '    activityTextbox.text = activityTextbox.text + vbNewLine
+    'End If
+    'activityTextbox.text = activityTextbox.text + text
+    
+End Sub
+
+
+'
+' Nasty code to leave password textbox control when enter or downkey is pressed
+'
+'Private Sub passwordTextBox_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+'    If KeyCode = 13 Or KeyCode = 40 Then Range("F5").Select
+'    If KeyCode = 38 Then Range("F3").Select
+'    ActiveSheet.Range("F4").value = ""
+'End Sub
+
+
+'
+' Manually update all streaming subscriptions
+' Only required if: Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "manualRefresh", "true"
+'
+Private Sub manualStreamingRefresh()
+    Application.WorksheetFunction.RTD "IG.api.excel.RTD.IGApiRTDServer", "", "refresh"
+End Sub
+
+
