@@ -1,0 +1,475 @@
+Option Explicit
+
+' Constants
+Dim IG_API_HOST As String
+Const IG_API_RTD_PROC_ID = "IG.api.excel.RTD.IGApiRTDServer"
+
+' Connection state
+Dim m_accountToken As String
+Dim m_clientToken As String
+Dim m_apiKey As String
+Dim m_currentAccountId As String
+Dim m_lsHost As String
+
+' HTTP connection
+Dim oXMLHTTP As Object
+
+'
+' Initialisation
+'
+Private Sub Class_Initialize()
+    Set oXMLHTTP = CreateObject("MSXML2.XMLHTTP.6.0")
+    setHost ("live")
+End Sub
+
+'
+' Set the target host URL
+'
+Public Sub setHost(host As String)
+    If host = "live" Then
+        IG_API_HOST = "https://api.ig.com/gateway/deal"
+    Else
+        IG_API_HOST = "https://demo-api.ig.com/gateway/deal"
+    End If
+End Sub
+
+'
+' Logout API
+'
+Public Sub logout()
+    
+    Call oXMLHTTP.Open("DELETE", IG_API_HOST + "/session", False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    
+    m_accountToken = ""
+    m_clientToken = ""
+    m_apiKey = ""
+    m_lsHost = ""
+    m_currentAccountId = ""
+End Sub
+
+'
+' Login (authentication) API
+'
+Public Function authenticateAccount(user As String, password As String, apiKey As String, Optional encrypted As Boolean = False) As Dictionary
+    
+    m_apiKey = apiKey
+    
+    Call oXMLHTTP.Open("POST", IG_API_HOST + "/session", False)
+    
+    Dim requestBodyDictionary As Dictionary
+    Set requestBodyDictionary = New Dictionary
+    
+    Call requestBodyDictionary.Add("identifier", user)
+    Call requestBodyDictionary.Add("password", password)
+    If encrypted Then
+        Call requestBodyDictionary.Add("encryptedPassword", encrypted)
+    End If
+    
+    Dim requestBodyString As Variant
+    requestBodyString = JSON.toString(requestBodyDictionary)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", apiKey)
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    If encrypted Then
+        Call oXMLHTTP.SetRequestHeader("Version", "2")
+    End If
+    
+    Call oXMLHTTP.send(requestBodyString)
+    
+    Dim responseData As Dictionary
+    Set responseData = JSON.parse(oXMLHTTP.responseText)
+    'Dim authenticationStatus As String
+    'authenticationStatus = responseData.item("authenticationStatus")
+    
+    If oXMLHTTP.Status = 200 Then
+        m_accountToken = oXMLHTTP.getResponseHeader("X-SECURITY-TOKEN")
+        m_clientToken = oXMLHTTP.getResponseHeader("CST")
+        m_currentAccountId = responseData.Item("currentAccountId")
+        m_lsHost = responseData.Item("lightstreamerEndpoint")
+        Set authenticateAccount = responseData
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set authenticateAccount = Nothing
+    End If
+        
+End Function
+
+'
+' Login (authentication) API using an encrypted password for additional security
+'
+Public Function authenticateAccountWithEncryption(user As String, password As String, apiKey As String) As Dictionary
+        
+    m_apiKey = apiKey
+    Dim encryptedPassword As String
+    encryptedPassword = encryptPassword(password)
+    Set authenticateAccountWithEncryption = authenticateAccount(user, encryptedPassword, apiKey, True)
+
+End Function
+
+'
+' Account switch API
+'
+Public Function switchAccount(accountId As String) As Dictionary
+
+    If (Not accountId = m_currentAccountId) Then
+    
+        Call oXMLHTTP.Open("PUT", IG_API_HOST + "/session", False)
+    
+        Dim requestBodyDictionary As Dictionary
+        Set requestBodyDictionary = New Dictionary
+    
+        Call requestBodyDictionary.Add("accountId", accountId)
+    
+        Dim requestBodyString As Variant
+        requestBodyString = JSON.toString(requestBodyDictionary)
+        Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+        Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+        Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+        Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+        Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    
+        Call oXMLHTTP.send(requestBodyString)
+    
+        If oXMLHTTP.Status = 200 Then
+            m_accountToken = oXMLHTTP.getResponseHeader("X-SECURITY-TOKEN")
+            m_currentAccountId = accountId
+            streamingReconnect
+        End If
+        
+    End If
+    
+End Function
+
+'
+' Get positions API
+'
+Public Function positions() As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/positions", False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set positions = data.Item("positions")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set positions = Nothing
+    End If
+        
+End Function
+
+'
+' Get watchlists API
+'
+Public Function Watchlists() As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/watchlists", False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set Watchlists = data.Item("watchlists")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set Watchlists = Nothing
+    End If
+        
+End Function
+
+'
+' Get watchlists API
+'
+Public Function accounts() As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/accounts", False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set accounts = data.Item("accounts")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set accounts = Nothing
+    End If
+        
+End Function
+
+
+'
+' Get watchlist markets API
+'
+Public Function watchlistMarkets(watchlistIdentifier As String) As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/watchlists/" + watchlistIdentifier, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set watchlistMarkets = data.Item("markets")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set watchlistMarkets = Nothing
+    End If
+        
+End Function
+
+'
+' Get historical prices API
+'
+Public Function prices(epic As String, resolution As String, numPoints As String) As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/prices/" + epic + "/" + resolution + "/" + numPoints, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set prices = data.Item("prices")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set prices = Nothing
+    End If
+        
+End Function
+
+'
+' Search markets API
+'
+Public Function markets(query As String) As Collection
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/markets?searchTerm=" + query, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set markets = data.Item("markets")
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set markets = Nothing
+    End If
+        
+End Function
+
+'
+' Get market details API
+'
+Public Function marketDetails(epic As String) As Object
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/markets/" + epic, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set marketDetails = JSON.parse(oXMLHTTP.responseText)
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set marketDetails = Nothing
+    End If
+        
+End Function
+
+'
+' Create position API
+'
+Public Function createPosition(epic As String, expiry As String, direction As String, size As String, crncy As String, limit As String) As String
+    Call oXMLHTTP.Open("POST", IG_API_HOST + "/positions/otc", False)
+    
+    Dim requestBodyDictionary As Dictionary
+    Set requestBodyDictionary = New Dictionary
+    
+    Call requestBodyDictionary.Add("epic", epic)
+    Call requestBodyDictionary.Add("expiry", expiry)
+    Call requestBodyDictionary.Add("direction", direction)
+    Call requestBodyDictionary.Add("size", size)
+    Call requestBodyDictionary.Add("currencyCode", crncy)
+    If Trim(limit) = "" Or limit = "N/A" Then
+        Call requestBodyDictionary.Add("orderType", "MARKET")
+    Else
+        Call requestBodyDictionary.Add("orderType", "LIMIT")
+        Call requestBodyDictionary.Add("level", limit)
+    End If
+    Call requestBodyDictionary.Add("guaranteedStop", "false")
+    Call requestBodyDictionary.Add("forceOpen", "false")
+    
+    Dim requestBodyString As Variant
+    requestBodyString = JSON.toString(requestBodyDictionary)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    
+    Call oXMLHTTP.send(requestBodyString)
+    
+    Dim responseData As Dictionary
+    Set responseData = JSON.parse(oXMLHTTP.responseText)
+    
+    If oXMLHTTP.Status = 200 Then
+        createPosition = responseData.Item("dealReference")
+    Else
+        MsgBox oXMLHTTP.responseText
+        createPosition = ""
+    End If
+        
+End Function
+
+'
+' Get deal confirmation API
+'
+Public Function dealConfirmation(dealReference As String) As String
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/confirms/" + dealReference, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        dealConfirmation = data.Item("dealStatus")
+        If data.Item("reason") = "" Then
+            dealConfirmation = data.Item("dealStatus")
+        Else
+            dealConfirmation = data.Item("dealStatus") + " - " + data.Item("reason")
+        End If
+    Else
+        MsgBox oXMLHTTP.responseText
+        dealConfirmation = ""
+    End If
+        
+End Function
+
+'
+' Encrypt password
+'
+Public Function encryptPassword(password As String) As String
+
+    Dim key As Dictionary
+    Set key = encryptionKey()
+    
+    Dim securityHelper As Object
+    Set securityHelper = CreateObject("IG.api.excel.RTD.SecurityHelper")
+    encryptPassword = securityHelper.SecurePassword(password, key.Item("encryptionKey"), key.Item("timeStamp"))
+    
+End Function
+'
+' Get encryption key for password encoding
+'
+Private Function encryptionKey() As Dictionary
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/session/encryptionKey", False)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Dictionary
+        Set data = JSON.parse(oXMLHTTP.responseText)
+        Set encryptionKey = data
+    End If
+
+End Function
+
+'
+' Get client sentiment API
+'
+Public Function clientSentiment(epic) As Object
+
+    Call oXMLHTTP.Open("GET", IG_API_HOST + "/clientsentiment/" + epic, False)
+    Call oXMLHTTP.SetRequestHeader("X-SECURITY-TOKEN", m_accountToken)
+    Call oXMLHTTP.SetRequestHeader("CST", m_clientToken)
+    Call oXMLHTTP.SetRequestHeader("X-IG-API-KEY", m_apiKey)
+    Call oXMLHTTP.SetRequestHeader("Content-Type", "application/json; charset=utf-8")
+    Call oXMLHTTP.SetRequestHeader("Accept", "application/json; charset=utf-8")
+    Call oXMLHTTP.send
+    If oXMLHTTP.Status = 200 Then
+        Dim data As Object
+        Set clientSentiment = JSON.parse(oXMLHTTP.responseText)
+    Else
+        MsgBox oXMLHTTP.responseText
+        Set clientSentiment = Nothing
+    End If
+        
+End Function
+
+'
+' Connect to Streaming API
+'
+Public Function streamingAuthentication(Optional maxPriceUpdateFrequency As Double = 0) As Boolean
+    
+    Dim password As String
+    password = "CST-" + m_clientToken + "|XST-" + m_accountToken
+    
+    Dim result As String
+    result = Application.WorksheetFunction.RTD(IG_API_RTD_PROC_ID, "", "connect", m_lsHost, m_currentAccountId, password, maxPriceUpdateFrequency)
+    If result = "OK" Then
+        streamingAuthentication = True
+    Else
+        streamingAuthentication = False
+        MsgBox "Failed to connect to streaming"
+    End If
+    
+End Function
+
+'
+' Disconnect from Streaming API
+'
+Public Sub streamingReconnect()
+    Application.WorksheetFunction.RTD IG_API_RTD_PROC_ID, "", "disconnect"
+    streamingAuthentication
+End Sub
+
+
+
+'
+' Build RTD formula string for a price subscription
+'
+Public Function buildRTDString(epic As String, field As String) As String
+    Dim rtdString As String
+    rtdString = "=RTD(""" + IG_API_RTD_PROC_ID + """, """ + epic + field + """ ,""subscribe"", ""market"", """ + epic + """, """ + field + """)"
+    buildRTDString = rtdString
+    
+End Function
+
+
+
